@@ -13,7 +13,12 @@ contract TradingGame {
     address payable public chairperson;
     uint public gambleOutcome;
     bool public outcomeSet = false;
-    uint public loserPercentage; // percentage of original bet that losers get back
+
+    // percentage of original bet that losers get back for each outcome
+    // set as a return on the trading strategy and is larger than 0 if the respective strategy was profitable
+    // if the strategy lost money, this amount will be subtracted from the winnersPool
+    mapping(uint => int) public loserPercentages; 
+
 
     struct Bet {
         uint outcome;
@@ -98,30 +103,41 @@ contract TradingGame {
         totalPool += _amount;
     }
 
-    function setOutcome(uint _outcome, uint _loserPercentage) public {
+    function setOutcome(uint _outcome, int[5] memory _loserPercentages) public {
         require(msg.sender == chairperson, "Only the chairperson can set the outcome.");
         require(!outcomeSet, "Outcome has already been set.");
         require(_outcome >= 0 && _outcome <= 4, "Outcome must be between 0 and 4.");
-        require(_loserPercentage >= 0 && _loserPercentage <= 100, "Loser percentage must be between 0 and 100.");
+
+        for (uint i = 0; i < 5; i++) {
+            require(_loserPercentages[i] >= -100, "Loser percentages must be larger than -100");
+            loserPercentages[i] = _loserPercentages[i];
+        }
 
         gambleOutcome = _outcome;
         outcomeSet = true;
-        loserPercentage = _loserPercentage;
 
         // Calculate total winners and winners pool
         for (uint i = 0; i < playerAddresses.length; i++) {
             Player storage player = players[playerAddresses[i]];
             for (uint j = 0; j < player.bets.length; j++) {
                 Bet storage bet = player.bets[j];
+                // if the bet is a correct one, add bet amount to totalWinners as total winning bet pool
                 if (bet.outcome == gambleOutcome) {
                     totalWinners += bet.amount;
+                // if the bet is a losing one, add bet amount to the pool that will be divided by the winners  
                 } else {
-                    winnersPool += bet.amount * loserPercentage / 100;
+                    // if the bet algo return percentage is negative, decrease the winners pool by that amount
+                    if (loserPercentages[bet.outcome]<0) {
+                        winnersPool += bet.amount * (uint(100 + loserPercentages[bet.outcome])) / 100;
+                    // if the bet algo return is positive, add the whole bet amoutn to winners pool
+                    } else {
+                        winnersPool += bet.amount;
+                    }
+                    
                 }
             }
         }
 
-        winnersPool = totalPool - winnersPool;
     }
 
     function redeem() public {
@@ -136,8 +152,16 @@ contract TradingGame {
             Bet storage bet = player.bets[i];
             if (bet.outcome == gambleOutcome) {
                 payout += winnersPool * bet.amount / totalWinners;
+                // if bet algo return was positive, increase payout by that amount
+                if (loserPercentages[bet.outcome]>0) {
+                    payout += bet.amount * uint(loserPercentages[bet.outcome]) / 100;
+                }
+            // losing bets get back the algo return if it is positive
             } else {
-                payout += bet.amount * loserPercentage / 100;
+                // if bet algo return was positive, payout that amount to losers
+                if (loserPercentages[bet.outcome]>0) {
+                    payout += bet.amount * uint(loserPercentages[bet.outcome]) / 100;
+                }
             }
         }
 
