@@ -42,6 +42,7 @@ contract TradingGame {
         Bet[] bets;
         uint totalBetAmount;
         uint previousRedeemableAmount;
+        bool addressSaved;
     }
 
     struct AlgoProvider {
@@ -122,19 +123,35 @@ contract TradingGame {
         return owner;
     }
 
-    function placeBet(uint _outcome, uint _amount) public payable {
+    function fundAccount(uint _amount) public payable {
         require(msg.value == _amount, "Sent value does not match the bet amount.");
+        Player storage player = players[msg.sender];
+        player.previousRedeemableAmount += _amount;
+
+        if (!player.addressSaved) {
+            playerAddresses.push(msg.sender);
+            player.addressSaved = true;
+        }
+    }
+
+
+    function placeBet(uint _outcome, uint _amount) public {
         require(!outcomeSet, "Betting period has ended, outcome already set.");
         require(!bettingStopped, "Betting period has ended, outcome already set.");
         require(_outcome >= 0 && _outcome < algoProviderAddresses.length, "Outcome must be between 0 and number of algo providers.");
 
         Player storage player = players[msg.sender];
+
+        require(player.previousRedeemableAmount >= _amount, "Account balance is less than bet size.");
+        player.previousRedeemableAmount -= _amount;
+
         player.bets.push(Bet(_outcome, _amount));
         player.totalBetAmount += _amount;
 
-        if (player.bets.length == 1) {
+        if (player.bets.length == 1 && !player.addressSaved) {
             // If this is the player's first bet, add them to the playerAddresses array
             playerAddresses.push(msg.sender);
+            player.addressSaved = true;
         }
 
         totalPool += _amount;
@@ -151,12 +168,12 @@ contract TradingGame {
         }
     }
 
-    function setOutcome(uint _outcome, int[MAX_ALGOPROVIDERS] memory _loserPercentages) public {
+    function setOutcome(uint _outcome, int[] memory _loserPercentages) public {
         require(msg.sender == chairperson, "Only the chairperson can set the outcome.");
         require(!outcomeSet, "Outcome has already been set.");
         require(_outcome >= 0 && _outcome < algoProviderAddresses.length, "Outcome must be between 0 and number of algo providers.");
 
-        for (uint i = 0; i < 5; i++) {
+        for (uint i = 0; i < MAX_ALGOPROVIDERS; i++) {
             require(_loserPercentages[i] >= -100, "Loser percentages must be larger than -100");
             loserPercentages[i] = _loserPercentages[i];
         }
@@ -188,6 +205,11 @@ contract TradingGame {
 
     }
 
+    function redeemableAmount(address _playerAddress) public view returns (uint) {
+        Player storage player = players[_playerAddress];
+        return player.previousRedeemableAmount;
+    }
+
     function redeem() public {
         require(outcomeSet, "Outcome has not been set yet.");
 
@@ -199,6 +221,7 @@ contract TradingGame {
             Bet storage bet = player.bets[i];
             if (bet.outcome == gambleOutcome) {
                 payout += winnersPool * bet.amount / totalWinners;
+                payout += bet.amount;
                 // if bet algo return was positive, increase payout by that amount
                 if (loserPercentages[bet.outcome]>0) {
                     payout += bet.amount * uint(loserPercentages[bet.outcome]) / 100;
@@ -220,7 +243,7 @@ contract TradingGame {
     }
 
     function startNewGame() public {
-        require(msg.sender == chairperson, "Only the chairperson can set the outcome.");
+        require(msg.sender == chairperson, "Only the chairperson can start a new game.");
         require(outcomeSet, "Outcome has not been set yet, the previous game is still on.");
         
         // make unclaimed bets redeemable
@@ -229,10 +252,12 @@ contract TradingGame {
             if (player.bets.length > 0){
                 // TODO refactor to function, reused in redeem()
                 uint payout = 0;
-                for (uint i = 0; i < player.bets.length; i++) {
-                    Bet storage bet = player.bets[i];
+                for (uint i = player.bets.length; i > 0; i--) {
+                    uint index = i - 1;
+                    Bet storage bet = player.bets[index];
                     if (bet.outcome == gambleOutcome) {
                         payout += winnersPool * bet.amount / totalWinners;
+                        payout += bet.amount;
                         // if bet algo return was positive, increase payout by that amount
                         if (loserPercentages[bet.outcome]>0) {
                             payout += bet.amount * uint(loserPercentages[bet.outcome]) / 100;
@@ -244,8 +269,10 @@ contract TradingGame {
                             payout += bet.amount * uint(loserPercentages[bet.outcome]) / 100;
                         }
                     }
+                    player.bets.pop();
                 }
                 player.previousRedeemableAmount += payout;
+                player.totalBetAmount = 0;
             }
             
         }
@@ -275,14 +302,27 @@ contract TradingGame {
     function addAlgoProvider(address _algoProvider) public {
         require(msg.sender == chairperson, "Only the chairperson can add algo provider.");
         require(algoProviderAddresses.length<=MAX_ALGOPROVIDERS, "Maximum algo providers already st.");
+        require(!algoProviders[_algoProvider].isAlgoProvider, "Algo provider already set");
         AlgoProvider memory newProvider;
         newProvider.isAlgoProvider = true;
         algoProviders[_algoProvider] = newProvider;
+        algoProviderAddresses.push(_algoProvider);
     }
 
     function removeAlgoProvider(address _algoProvider) public {
         require(msg.sender == chairperson, "Only the chairperson can remove algo prodivder.");
+        require(!bettingStopped, "Algo provider can be removed only when betting is stopped");
         delete algoProviders[_algoProvider];
+        address[] memory tempArray = new address[](algoProviderAddresses.length-1);
+        uint adjustPosition = 0;
+        for (uint i=0; i<algoProviderAddresses.length; i++){
+            if (algoProviderAddresses[i]!=_algoProvider){
+                tempArray[i - adjustPosition] = _algoProvider;
+            } else {
+                adjustPosition = 1;
+            }
+        }
+        algoProviderAddresses = tempArray;
     }
 
 
@@ -301,7 +341,7 @@ contract TradingGame {
         emit Staked(msg.sender, msg.value);
     }
 
-    function redeem(uint amount) public {
+    function unstake(uint amount) public {
         require(algoProviders[msg.sender].isAlgoProvider, "Only algo providers can stake");
         AlgoProvider storage algoProvider = algoProviders[msg.sender];
         require(algoProvider.stakedAmount >= amount, "Insufficient balance to redeem.");
@@ -327,6 +367,8 @@ contract TradingGame {
 
     function swapExactInputSingle(uint256 _amountIn, uint256 _minAmountOut, bool _liquidate) external returns (uint256 _amountOut) {
         require(algoProviders[msg.sender].isAlgoProvider, "Only algo providers can swap");
+        require(!bettingStopped, "Algo provider can start swapping only when betting is stopped");
+        require(algoProviders[msg.sender].stakedAmount>=requiredAlgoProviderStake, "Algo provider stake must satisfy minimum required stake constraint");
         AlgoProvider storage algoProvider = algoProviders[msg.sender];
         if (!_liquidate){
             require(algoProvider.usedManagementAmount + _amountIn <= algoProvider.managementAmount, "Algo provider management amount exceeded, transaction not allowed");
