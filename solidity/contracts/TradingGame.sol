@@ -213,6 +213,14 @@ contract TradingGame {
         return player.previousRedeemableAmount;
     }
 
+    function getOutcomePoolAmounts() public view returns (uint[] memory) {
+        uint[] memory outcome = new uint[](MAX_ALGOPROVIDERS);
+        for (uint i=0; i<MAX_ALGOPROVIDERS; i++){
+            outcome[i] = outcomePool[i];
+        }
+        return outcome;
+    }
+
     function redeem() public {
         require(outcomeSet, "Outcome has not been set yet.");
 
