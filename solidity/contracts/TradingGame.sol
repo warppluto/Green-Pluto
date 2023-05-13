@@ -1,6 +1,18 @@
 // SPDX-License-Identifier: GPL-3.0
 
 pragma solidity >=0.8.0 <0.9.0;
+pragma abicoder v2;
+
+
+
+import "@uniswap/v3-periphery/contracts/interfaces/ISwapRouter.sol";
+import "@uniswap/lib/contracts/libraries/TransferHelper.sol";
+
+interface IERC20 {
+    function balanceOf(address account) external view returns (uint256);
+    function transfer(address recipient, uint256 amount) external returns (bool);
+    function transferFrom(address sender, address recipient, uint256 amount) external returns (bool);
+}
 
 /**
  * @title Owner
@@ -13,6 +25,7 @@ contract TradingGame {
     address payable public chairperson;
     uint public gambleOutcome;
     bool public outcomeSet = false;
+    bool public bettingStopped = false;
 
     // percentage of original bet that losers get back for each outcome
     // set as a return on the trading strategy and is larger than 0 if the respective strategy was profitable
@@ -34,13 +47,23 @@ contract TradingGame {
     struct AlgoProvider {
         uint stakedAmount;
         bool isAlgoProvider;
+        uint managementAmount;
+        uint usedManagementAmount;
+        uint swappedTotalOutstanding;
+        uint totalAmountReturned;
     }
 
     mapping(address => Player) public players;
     address[] public playerAddresses;
 
+    uint public constant MAX_ALGOPROVIDERS = 5;
     mapping(address => AlgoProvider) public algoProviders;
     address[] public algoProviderAddresses;
+
+    // minimum staked amount to become an algo provider, which cannot be overridden
+    uint public constant MINIMUM_STAKE = 1000000000000000000;
+    // the required stake from Algo providers, must be greater or equal to MINIMUM_STAKE
+    uint public requiredAlgoProviderStake = MINIMUM_STAKE;
 
     // The total amount of money that has been bet by all players. 
     // Every time a player places a bet, the amount they bet is added to totalPool.
@@ -101,8 +124,9 @@ contract TradingGame {
 
     function placeBet(uint _outcome, uint _amount) public payable {
         require(msg.value == _amount, "Sent value does not match the bet amount.");
-        require(!outcomeSet, "Betting period has ended.");
-        require(_outcome >= 0 && _outcome <= 4, "Outcome must be between 0 and 4.");
+        require(!outcomeSet, "Betting period has ended, outcome already set.");
+        require(!bettingStopped, "Betting period has ended, outcome already set.");
+        require(_outcome >= 0 && _outcome < algoProviderAddresses.length, "Outcome must be between 0 and number of algo providers.");
 
         Player storage player = players[msg.sender];
         player.bets.push(Bet(_outcome, _amount));
@@ -117,10 +141,20 @@ contract TradingGame {
         outcomePool[_outcome] += _amount;
     }
 
-    function setOutcome(uint _outcome, int[5] memory _loserPercentages) public {
+    function stopBetting() public {
+        require(msg.sender == chairperson, "Only the chairperson can stop the betting.");
+        require(!bettingStopped, "Betting has already been stopped.");
+        bettingStopped = true;
+        for (uint i=0; i<algoProviderAddresses.length; i++){
+            AlgoProvider storage algoProvider = algoProviders[algoProviderAddresses[i]];
+            algoProvider.managementAmount = outcomePool[i];
+        }
+    }
+
+    function setOutcome(uint _outcome, int[MAX_ALGOPROVIDERS] memory _loserPercentages) public {
         require(msg.sender == chairperson, "Only the chairperson can set the outcome.");
         require(!outcomeSet, "Outcome has already been set.");
-        require(_outcome >= 0 && _outcome <= 4, "Outcome must be between 0 and 4.");
+        require(_outcome >= 0 && _outcome < algoProviderAddresses.length, "Outcome must be between 0 and number of algo providers.");
 
         for (uint i = 0; i < 5; i++) {
             require(_loserPercentages[i] >= -100, "Loser percentages must be larger than -100");
@@ -158,7 +192,6 @@ contract TradingGame {
         require(outcomeSet, "Outcome has not been set yet.");
 
         Player storage player = players[msg.sender];
-
         require(player.bets.length > 0, "No bets to redeem.");
 
         uint payout = 0;
@@ -216,23 +249,32 @@ contract TradingGame {
             }
             
         }
-        outcomeSet = false;
+
+        for (uint i=0; i<algoProviderAddresses.length; i++){
+            AlgoProvider storage algoProvider = algoProviders[algoProviderAddresses[i]];
+            algoProvider.managementAmount = 0;
+        }
+        
         totalPool = 0;
         winnersPool = 0;
         totalWinners = 0;
 
         // reset outcome specific information
-        for (uint i = 0; i < 5; i++) {
+        for (uint i = 0; i < algoProviderAddresses.length; i++) {
             loserPercentages[i] = 0;
             outcomePool[i] = 0;
         }
 
         gambleOutcome = 0;
 
+        outcomeSet = false;
+        bettingStopped = false;
+
     }
 
     function addAlgoProvider(address _algoProvider) public {
         require(msg.sender == chairperson, "Only the chairperson can add algo provider.");
+        require(algoProviderAddresses.length<=MAX_ALGOPROVIDERS, "Maximum algo providers already st.");
         AlgoProvider memory newProvider;
         newProvider.isAlgoProvider = true;
         algoProviders[_algoProvider] = newProvider;
@@ -241,6 +283,14 @@ contract TradingGame {
     function removeAlgoProvider(address _algoProvider) public {
         require(msg.sender == chairperson, "Only the chairperson can remove algo prodivder.");
         delete algoProviders[_algoProvider];
+    }
+
+
+    function setMinimumAlgoProviderStake(uint _stakeAmount) public {
+        require(msg.sender == chairperson, "Only the chairperson can set the stake.");
+        require(_stakeAmount >= MINIMUM_STAKE, "The stake amount must equal to or exceed minimum stake.");
+        requiredAlgoProviderStake = _stakeAmount;
+
     }
 
     function stake() public payable {
@@ -259,5 +309,63 @@ contract TradingGame {
         payable(msg.sender).transfer(amount);
         emit Redeemed(msg.sender, amount);
     }
+
+    
+
+
+    address private constant SWAP_ROUTER = 0xE592427A0AEce92De3Edee1F18E0157C05861564;
+
+    address private constant WETH = 0xB4FBF271143F4FBf7B91A5ded31805e42b2208d6; //goerli
+    address private constant UNI = 0x1f9840a85d5aF5bf1D1762F925BDADdC4201F984; //goerli
+
+
+    ISwapRouter public immutable swapRouter = ISwapRouter(SWAP_ROUTER);
+    
+    IERC20 private wethToken;
+    IERC20 private uniToken;
+
+
+    function swapExactInputSingle(uint256 _amountIn, uint256 _minAmountOut, bool _liquidate) external returns (uint256 _amountOut) {
+        require(algoProviders[msg.sender].isAlgoProvider, "Only algo providers can swap");
+        AlgoProvider storage algoProvider = algoProviders[msg.sender];
+        if (!_liquidate){
+            require(algoProvider.usedManagementAmount + _amountIn <= algoProvider.managementAmount, "Algo provider management amount exceeded, transaction not allowed");
+            algoProvider.usedManagementAmount += _amountIn;
+        } else {
+            require(algoProvider.swappedTotalOutstanding - _amountIn >= algoProvider.swappedTotalOutstanding, "Algo provider management amount exceeded, transaction not allowed");
+            algoProvider.swappedTotalOutstanding -= _amountIn;            
+        }
+        // only predifined tokens allowed for swap, can later be set in the constructor, currently hardcoded
+        address _tokenIn = WETH;
+        address _tokenOut = UNI;
+
+        if (_liquidate){
+            _tokenIn = UNI;
+            _tokenOut = WETH;
+        }
+
+        ISwapRouter.ExactInputSingleParams memory params = ISwapRouter
+            .ExactInputSingleParams({
+                tokenIn: _tokenIn,
+                tokenOut: _tokenOut,
+                fee: 3000,
+                recipient: address(this),
+                deadline: block.timestamp+60,
+                amountIn: _amountIn,
+                amountOutMinimum: _minAmountOut,
+                sqrtPriceLimitX96: 0
+            });
+
+        _amountOut = swapRouter.exactInputSingle{value: address(this).balance}(params);
+        if (!_liquidate){
+            algoProvider.swappedTotalOutstanding += _amountOut;
+        } else {
+            algoProvider.usedManagementAmount -= _amountOut;
+        }
+        
+    }
+
+
+
 }
 
