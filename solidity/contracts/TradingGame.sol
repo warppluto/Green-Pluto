@@ -82,6 +82,8 @@ contract TradingGame {
     mapping(uint => uint) public outcomePool;
 
     // event for EVM logging
+    event BettingOpen();
+    event OutcomeSet(uint indexed gambleOutcome, uint indexed totalPool, uint indexed winnersPool, uint totalWinners);
     event OwnerSet(address indexed oldOwner, address indexed newOwner);
     event Staked(address indexed user, uint amount);
     event Redeemed(address indexed user, uint amount);
@@ -179,7 +181,7 @@ contract TradingGame {
         }
 
         gambleOutcome = _outcome;
-        outcomeSet = true;
+        outcomeSet = true;      
 
         // Calculate total winners and winners pool
         for (uint i = 0; i < playerAddresses.length; i++) {
@@ -202,6 +204,7 @@ contract TradingGame {
                 }
             }
         }
+        emit OutcomeSet(gambleOutcome, totalPool, winnersPool, totalWinners);
 
     }
 
@@ -296,6 +299,8 @@ contract TradingGame {
 
         outcomeSet = false;
         bettingStopped = false;
+
+        emit BettingOpen();
 
     }
 
