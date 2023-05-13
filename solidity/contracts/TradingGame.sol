@@ -31,8 +31,16 @@ contract TradingGame {
         uint previousRedeemableAmount;
     }
 
+    struct AlgoProvider {
+        uint stakedAmount;
+        bool isAlgoProvider;
+    }
+
     mapping(address => Player) public players;
     address[] public playerAddresses;
+
+    mapping(address => AlgoProvider) public algoProviders;
+    address[] public algoProviderAddresses;
 
     // The total amount of money that has been bet by all players. 
     // Every time a player places a bet, the amount they bet is added to totalPool.
@@ -51,6 +59,8 @@ contract TradingGame {
 
     // event for EVM logging
     event OwnerSet(address indexed oldOwner, address indexed newOwner);
+    event Staked(address indexed user, uint amount);
+    event Redeemed(address indexed user, uint amount);
 
     // modifier to check if caller is owner
     modifier isOwner() {
@@ -221,4 +231,33 @@ contract TradingGame {
 
     }
 
+    function addAlgoProvider(address _algoProvider) public {
+        require(msg.sender == chairperson, "Only the chairperson can add algo provider.");
+        AlgoProvider memory newProvider;
+        newProvider.isAlgoProvider = true;
+        algoProviders[_algoProvider] = newProvider;
+    }
+
+    function removeAlgoProvider(address _algoProvider) public {
+        require(msg.sender == chairperson, "Only the chairperson can remove algo prodivder.");
+        delete algoProviders[_algoProvider];
+    }
+
+    function stake() public payable {
+        require(algoProviders[msg.sender].isAlgoProvider, "Only algo providers can stake");
+        require(msg.value > 0, "Stake amount must be greater than 0.");
+        AlgoProvider storage algoProvider = algoProviders[msg.sender];
+        algoProvider.stakedAmount += msg.value;
+        emit Staked(msg.sender, msg.value);
+    }
+
+    function redeem(uint amount) public {
+        require(algoProviders[msg.sender].isAlgoProvider, "Only algo providers can stake");
+        AlgoProvider storage algoProvider = algoProviders[msg.sender];
+        require(algoProvider.stakedAmount >= amount, "Insufficient balance to redeem.");
+        algoProvider.stakedAmount -= amount;
+        payable(msg.sender).transfer(amount);
+        emit Redeemed(msg.sender, amount);
+    }
 }
+
