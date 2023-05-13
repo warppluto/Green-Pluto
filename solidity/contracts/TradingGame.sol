@@ -28,6 +28,7 @@ contract TradingGame {
     struct Player {
         Bet[] bets;
         uint totalBetAmount;
+        uint previousRedeemableAmount;
     }
 
     mapping(address => Player) public players;
@@ -45,6 +46,8 @@ contract TradingGame {
     // It's used to calculate how much each winner gets when they redeem their bet. 
     // The payout for each winning bet is proportional to the amount of that bet relative to totalWinners.
     uint public totalWinners;
+
+    mapping(uint => uint) public outcomePool;
 
     // event for EVM logging
     event OwnerSet(address indexed oldOwner, address indexed newOwner);
@@ -101,6 +104,7 @@ contract TradingGame {
         }
 
         totalPool += _amount;
+        outcomePool[_outcome] += _amount;
     }
 
     function setOutcome(uint _outcome, int[5] memory _loserPercentages) public {
@@ -164,12 +168,57 @@ contract TradingGame {
                 }
             }
         }
+        payout += player.previousRedeemableAmount;
 
         require(payout <= address(this).balance, "Contract does not have enough funds to pay out.");
-
+        player.previousRedeemableAmount = 0;
         delete players[msg.sender];
         payable(msg.sender).transfer(payout);
     }
 
-}
+    function startNewGame() public {
+        require(msg.sender == chairperson, "Only the chairperson can set the outcome.");
+        require(outcomeSet, "Outcome has not been set yet, the previous game is still on.");
+        
+        // make unclaimed bets redeemable
+        for (uint j = 0; j < playerAddresses.length; j++) {
+            Player storage player = players[playerAddresses[j]];
+            if (player.bets.length > 0){
+                // TODO refactor to function, reused in redeem()
+                uint payout = 0;
+                for (uint i = 0; i < player.bets.length; i++) {
+                    Bet storage bet = player.bets[i];
+                    if (bet.outcome == gambleOutcome) {
+                        payout += winnersPool * bet.amount / totalWinners;
+                        // if bet algo return was positive, increase payout by that amount
+                        if (loserPercentages[bet.outcome]>0) {
+                            payout += bet.amount * uint(loserPercentages[bet.outcome]) / 100;
+                        }
+                    // losing bets get back the algo return if it is positive
+                    } else {
+                        // if bet algo return was positive, payout that amount to losers
+                        if (loserPercentages[bet.outcome]>0) {
+                            payout += bet.amount * uint(loserPercentages[bet.outcome]) / 100;
+                        }
+                    }
+                }
+                player.previousRedeemableAmount += payout;
+            }
+            
+        }
+        outcomeSet = false;
+        totalPool = 0;
+        winnersPool = 0;
+        totalWinners = 0;
 
+        // reset outcome specific information
+        for (uint i = 0; i < 5; i++) {
+            loserPercentages[i] = 0;
+            outcomePool[i] = 0;
+        }
+
+        gambleOutcome = 0;
+
+    }
+
+}
