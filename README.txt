@@ -7,6 +7,15 @@ Solidity smart contract has been deployed to:
 3) Optimism: 
 4) Scroll: https://blockscout.scroll.io/address/0x8fed78378216645fe64392acBaBa0e8c0114c875
 
-Subgraph available at:
+Sponsor judging:
+
+* The Qraph: Subgraph created and deployed and available at:
 https://api.studio.thegraph.com/query/46807/green-pluto-subgraph/v0.1
+
+* zkBob:
+zkBob address generated: zkbob_polygon:HPbCiohP8Lb4rvXmY1FHAWrMVjqTo6v6BShNWhzaWWCf5AvzRFj5D2HkeWonyCU
+
+* Polygon: polygon deployment made, see deployment addresses above
+
+* Scroll: scroll deployment made, see deployment addresses above
 
