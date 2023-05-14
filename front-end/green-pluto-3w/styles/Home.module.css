@@ -38,10 +38,28 @@
 .description {
   text-align: center;
 }
+.list {
+  text-align: left;
+}
 
 .connect {
   margin-bottom: 2rem;
   width: 230px;
+}
+
+.betButton {
+  background-color: #f213a4;
+  border: none;
+  color: white;
+  padding: 15px 32px;
+  text-align: center;
+  text-decoration: none;
+  display: inline-block;
+  font-size: 16px;
+  margin: 4px 2px;
+  cursor: pointer;
+  border-radius: 5px;
+  margin-top: 20px;
 }
 
 .description {
