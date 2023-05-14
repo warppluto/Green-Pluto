@@ -37,8 +37,8 @@ Unfortunately it was not possible to obtain the app_id and thus the widget: <IDK
 for certain cases for Algo providers to compete with the algos and get the best prices.
 Tried to add a widget/component in frontend for users to swap, but didn't make it to full integration and removed from the last version (left the button though)
 
-* Optimism: optimism deployment made (truncuated code due to cost restraints), see deployment addresses:
-Optimism: https://optimistic.etherscan.io/address/0xf90AE1653Bcc5883E8652ff2cAA9465A443d7662
+* Optimism: optimism deployment made (truncuated code due to cost/gas restraints), see deployment addresses:
+https://optimistic.etherscan.io/address/0xf90AE1653Bcc5883E8652ff2cAA9465A443d7662
 
 ---
 
