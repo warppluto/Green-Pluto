@@ -23,3 +23,10 @@ https://twitter.com/WarpPluto/status/1657548037575655432
 * Scroll: scroll deployment made, see deployment addresses:
 https://blockscout.scroll.io/address/0x8fed78378216645fe64392acBaBa0e8c0114c875
 
+* Worldcoin: Worldcoin widget was added to front-end, since this may be a game with restrictions in many juristications.
+Unfortunately it was not possible to obtain the app_id and thus the widget: <IDKitWidget /> does not show up in frontend althoug necessary code is added
+
+* 1inch: your product fits well as a complement to players to swap their tokens to play the game (place bets), or
+for certain cases for Algo providers to compete with the algos and get the best prices.
+Tried to add a widget/component in frontend for users to swap, but didn't make it to full integration and removed from the last version (left the button though)
+

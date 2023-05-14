@@ -38,6 +38,12 @@
 .description {
   text-align: center;
 }
+
+.inch {
+  text-align: center;
+  color: #f213a4;
+}
+
 .list {
   text-align: left;
 }
@@ -60,6 +66,27 @@
   cursor: pointer;
   border-radius: 5px;
   margin-top: 20px;
+}
+
+.inchButton {
+  background-color: grey;
+  border: none;
+  color: black;
+  padding: 10px 12px;
+  text-align: center;
+  text-decoration: none;
+  display: inline-block;
+  font-size: 16px;
+  margin: 4px 2px;
+  cursor: pointer;
+  border-radius: 5px;
+  margin-top: 20px;
+  margin-left: 20px;
+  border: solid 2px white;
+}
+.inchButton:hover {
+  background-color: #f213a4;
+  color: white;
 }
 
 .description {

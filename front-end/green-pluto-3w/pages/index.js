@@ -48,6 +48,10 @@ export default function Home() {
           <ConnectWallet />
         </div>
 
+        <p className={styles.inch}>
+          Running out of tokens, use 1inch widget (coming soon) to swap your tokens to use in the game! <button className={styles.inchButton}>Swap on 1inch</button>
+        </p>
+
         <div className={styles.worldcoin}>
         <p className={styles.description_small}> Worldcoin widget (app_id not available from developer.worldcoin.org): </p>
         <IDKitWidget
