@@ -27,14 +27,15 @@ export default function Home() {
 
         <p className={styles.description}>
           The ultimate game to bet on trading algos and new kind of financial derivative<br />
-          <ul className={styles.list}>
+        </p>  
+        <ul className={styles.list}>
             <li>All algos compete in making profits in the same crypto assets</li>
             <li>The backers of the winning algo earn the principle of other algo backers</li>
             <li>If your chosen algo earns money, you will always keep the earnings</li>
             <li>This is a variation of binary derivatives gamifyied</li>
-          </ul>
+        </ul>
           
-        </p>
+        
         {/*
         <select
           value={String(selectedChain)}
